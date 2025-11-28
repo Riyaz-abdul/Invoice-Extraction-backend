@@ -1,43 +1,46 @@
 const axios = require("axios");
 const FormData = require("form-data");
-const sql = require("mssql");
+const { getPool, sql } = require("../db");
 const { uploadToBlob } = require("../azureBlob");
 
+// ------------------------------------------------------
+// 1️⃣ CREATE INVOICE
+// ------------------------------------------------------
 exports.createInvoice = async (req, res) => {
   try {
     console.log("I am hitted");
+
     const { body, file } = req;
 
     if (!file) return res.status(400).json({ message: "PDF file is required." });
     if (!body.country) return res.status(400).json({ message: "Country is required." });
 
-    // 1️⃣ Upload PDF to Azure 
+    // 1. Upload PDF to Azure Blob
     const fileUrl = await uploadToBlob(file.buffer, file.originalname, file.mimetype);
     const fileName = file.originalname;
 
-    // 2️⃣ Send to external API
+    // 2. Prepare external API request
     const formData = new FormData();
+    formData.append("pdf", file.buffer, file.originalname);
+    formData.append("vendor", body.vendor || "Default Vendor");
+    formData.append("country", body.country);
 
-
-
-formData.append("pdf", file.buffer, file.originalname);
-formData.append("vendor", body.vendor || "Default Vendor");
-formData.append("country", body.country);
-
-
-
-    
-
+    // 3. Call external invoice extraction API
     const apiResponse = await axios.post(
       "https://invoice-service.peolgenai.com/accountspayable",
       formData,
-      { headers: formData.getHeaders(), maxBodyLength: Infinity  }
+      {
+        headers: formData.getHeaders(),
+        maxBodyLength: Infinity,
+      }
     );
 
     const { headers = {}, line_items = [] } = apiResponse.data;
-   console.log("Line Items Count:", line_items.length);
-    // 3️⃣ Save to SQL Server
-    const pool = await sql.connect();
+    console.log("Line Items Count:", line_items.length);
+
+    // 4. Save processed data into SQL Server
+    const pool = await getPool();
+
     const result = await pool.request()
       .input("PdfBlobUrl", sql.NVarChar, fileUrl)
       .input("PdfFileName", sql.NVarChar, fileName)
@@ -58,7 +61,7 @@ formData.append("country", body.country);
 
     const insertedId = result.recordset[0].Id;
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Invoice successfully processed and saved.",
       invoiceId: insertedId,
       fileUrl,
@@ -76,12 +79,158 @@ formData.append("country", body.country);
       });
     }
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Failed to process invoice.",
       error: error.message,
     });
   }
 };
+
+// ------------------------------------------------------
+// 2️⃣ GET ALL INVOICES
+// ------------------------------------------------------
+exports.getInvoices = async (req, res) => {
+  try {
+    const pool = await getPool();
+
+    const result = await pool.request().query(`
+      SELECT 
+        Id, PdfBlobUrl, PdfFileName, Vendor, Country,
+        SaveMetadata, VisionHeader, VisionItem, Status,
+        CreatedAt, UpdatedAt
+      FROM test1_Invoice
+      ORDER BY CreatedAt DESC
+    `);
+
+    return res.status(200).json(result.recordset);
+
+  } catch (error) {
+    console.error("Error fetching invoices:", error.message);
+    return res.status(500).json({
+      message: "Failed to fetch invoices.",
+      error: error.message,
+    });
+  }
+};
+
+// ------------------------------------------------------
+// 3️⃣ GET INVOICE BY ID
+// ------------------------------------------------------
+exports.getInvoiceById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const pool = await getPool();
+
+    const result = await pool.request()
+      .input("Id", sql.UniqueIdentifier, id)
+      .query(`
+        SELECT * FROM test1_Invoice WHERE Id = @Id
+      `);
+
+    if (result.recordset.length === 0) {
+      return res.status(404).json({ message: "Invoice not found" });
+    }
+
+    return res.status(200).json(result.recordset[0]);
+
+  } catch (error) {
+    console.error("Error fetching invoice by ID:", error.message);
+    return res.status(500).json({
+      message: "Failed to fetch invoice.",
+      error: error.message,
+    });
+  }
+};
+
+
+
+//this is changed
+
+// const axios = require("axios");
+// const FormData = require("form-data");
+// const sql = require("mssql");
+// const { uploadToBlob } = require("../azureBlob");
+
+// exports.createInvoice = async (req, res) => {
+//   try {
+//     console.log("I am hitted");
+//     const { body, file } = req;
+
+//     if (!file) return res.status(400).json({ message: "PDF file is required." });
+//     if (!body.country) return res.status(400).json({ message: "Country is required." });
+
+//     // 1️⃣ Upload PDF to Azure 
+//     const fileUrl = await uploadToBlob(file.buffer, file.originalname, file.mimetype);
+//     const fileName = file.originalname;
+
+//     // 2️⃣ Send to external API
+//     const formData = new FormData();
+
+
+
+// formData.append("pdf", file.buffer, file.originalname);
+// formData.append("vendor", body.vendor || "Default Vendor");
+// formData.append("country", body.country);
+
+
+
+    
+
+//     const apiResponse = await axios.post(
+//       "https://invoice-service.peolgenai.com/accountspayable",
+//       formData,
+//       { headers: formData.getHeaders(), maxBodyLength: Infinity  }
+//     );
+
+//     const { headers = {}, line_items = [] } = apiResponse.data;
+//    console.log("Line Items Count:", line_items.length);
+//     // 3️⃣ Save to SQL Server
+//     const pool = await sql.connect();
+//     const result = await pool.request()
+//       .input("PdfBlobUrl", sql.NVarChar, fileUrl)
+//       .input("PdfFileName", sql.NVarChar, fileName)
+//       .input("Vendor", sql.NVarChar, body.vendor || "Default Vendor")
+//       .input("Country", sql.NVarChar, body.country)
+//       .input("SaveMetadata", sql.Bit, body.save_metadata === "true" || body.save_metadata === true)
+//       .input("VisionHeader", sql.Bit, body.vision_header === "true" || body.vision_header === true)
+//       .input("VisionItem", sql.Bit, body.vision_item === "true" || body.vision_item === true)
+//       .input("Status", sql.NVarChar, body.status || "Needs Review")
+//       .input("Headers", sql.NVarChar, JSON.stringify(headers))
+//       .input("LineItems", sql.NVarChar, JSON.stringify(line_items))
+//       .query(`
+//         INSERT INTO test1_Invoice 
+//         (PdfBlobUrl, PdfFileName, Vendor, Country, SaveMetadata, VisionHeader, VisionItem, Status, Headers, LineItems)
+//         OUTPUT INSERTED.Id
+//         VALUES (@PdfBlobUrl, @PdfFileName, @Vendor, @Country, @SaveMetadata, @VisionHeader, @VisionItem, @Status, @Headers, @LineItems)
+//       `);
+
+//     const insertedId = result.recordset[0].Id;
+
+//     res.status(201).json({
+//       message: "Invoice successfully processed and saved.",
+//       invoiceId: insertedId,
+//       fileUrl,
+//       headers,
+//       line_items,
+//     });
+
+//   } catch (error) {
+//     console.error("Invoice processing error:", error);
+
+//     if (error.response) {
+//       return res.status(error.response.status).json({
+//         message: "Invoice API error",
+//         details: error.response.data,
+//       });
+//     }
+
+//     res.status(500).json({
+//       message: "Failed to process invoice.",
+//       error: error.message,
+//     });
+//   }
+// };
 
 
 
