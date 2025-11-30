@@ -1,5 +1,6 @@
 // db.js
 const sql = require("mssql");
+require("dotenv").config(); // Only used locally
 
 const config = {
   server: process.env.DB_SERVER,
@@ -19,8 +20,12 @@ async function getPool() {
   try {
     if (pool) return pool;
 
+    // 🔥 ADD THIS DEBUG LINE
+    console.log("DB_SERVER in Azure:", process.env.DB_SERVER);
+
     pool = await sql.connect(config);
     console.log("✅ SQL Server connected");
+
     return pool;
   } catch (err) {
     console.error("❌ SQL Connection Error:", err.message);
@@ -29,6 +34,7 @@ async function getPool() {
 }
 
 module.exports = { sql, getPool };
+
 
 
 
