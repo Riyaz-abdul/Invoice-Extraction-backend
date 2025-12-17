@@ -94,8 +94,9 @@ exports.createInvoice = async (req, res) => {
         body.vision_item === "true" || body.vision_item === true
       )
       .input("Status", sql.NVarChar, body.status || "Needs Review")
-      .input("Headers", sql.NVarChar, JSON.stringify(headers))
-      .input("LineItems", sql.NVarChar, JSON.stringify(line_items))
+     .input("Headers", sql.NVarChar(sql.MAX), JSON.stringify(headers))
+.input("LineItems", sql.NVarChar(sql.MAX), JSON.stringify(line_items))
+
       .query(`
         INSERT INTO test1_Invoice 
         (PdfBlobUrl, PdfFileName, Vendor, Country, SaveMetadata, VisionHeader, VisionItem, Status, Headers, LineItems)
