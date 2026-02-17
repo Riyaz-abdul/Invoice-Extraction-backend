@@ -136,6 +136,30 @@ exports.createInvoice = async (req, res) => {
 // ------------------------------------------------------
 // 2️⃣ GET ALL INVOICES
 // ------------------------------------------------------
+// exports.getInvoices = async (req, res) => {
+//   try {
+//     console.log("✅ GET /invoice hit");
+
+//     const pool = await getPool();
+//     const result = await pool.request().query(`
+//       SELECT 
+//         Id, PdfBlobUrl, PdfFileName, Vendor, Country,
+//         SaveMetadata, VisionHeader, VisionItem, Status,
+//         CreatedAt, UpdatedAt
+//       FROM test1_Invoice
+//       ORDER BY CreatedAt DESC
+//     `);
+
+//     return res.status(200).json(result.recordset);
+//   } catch (error) {
+//     console.error("❌ Error fetching invoices:", error);
+//     return res.status(500).json({
+//       message: "Failed to fetch invoices.",
+//       error: error.message,
+//     });
+//   }
+// };
+
 exports.getInvoices = async (req, res) => {
   try {
     console.log("✅ GET /invoice hit");
@@ -145,6 +169,7 @@ exports.getInvoices = async (req, res) => {
       SELECT 
         Id, PdfBlobUrl, PdfFileName, Vendor, Country,
         SaveMetadata, VisionHeader, VisionItem, Status,
+        Headers, LineItems,     -- ✅ ADD THESE
         CreatedAt, UpdatedAt
       FROM test1_Invoice
       ORDER BY CreatedAt DESC
@@ -159,6 +184,7 @@ exports.getInvoices = async (req, res) => {
     });
   }
 };
+
 
 // ------------------------------------------------------
 // 3️⃣ GET INVOICE BY ID
